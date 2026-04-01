@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "719405346275",
+    "project_id": "attenqr-951f5",
+    "storage_bucket": "attenqr-951f5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:719405346275:android:ac3851ad07eede39b404d6",
+        "android_client_info": {
+          "package_name": "com.bibek.atten_qr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4qJ33tMyLvXTe3XoJGwySa9nb252jSGk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

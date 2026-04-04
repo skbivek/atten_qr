@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_page.dart';
 import 'scan_page.dart';
 
@@ -13,6 +14,7 @@ class StudentHomePage extends StatefulWidget {
 
 class _StudentHomePageState extends State<StudentHomePage> {
   final TextEditingController joinCodeController = TextEditingController();
+  String? _name;
 
   final List<Map<String, String>> joinedClasses = [
     {
@@ -28,6 +30,25 @@ class _StudentHomePageState extends State<StudentHomePage> {
       'code': 'DBS202',
     },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserData();
+  }
+
+  Future<void> _fetchUserData() async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(widget.uid).get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _name = doc.data()?['name'];
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching user data: $e");
+    }
+  }
 
   void joinClass() {
     final code = joinCodeController.text.trim();
@@ -125,7 +146,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'UID: ${widget.uid}',
+            _name ?? 'Loading...',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 19,

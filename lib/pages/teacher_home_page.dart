@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_page.dart';
 import 'qr_session_page.dart';
 
@@ -14,6 +15,7 @@ class TeacherHomePage extends StatefulWidget {
 class _TeacherHomePageState extends State<TeacherHomePage> {
   final TextEditingController classTitleController = TextEditingController();
   final TextEditingController sectionController = TextEditingController();
+  String? _name;
 
   final List<Map<String, dynamic>> classes = [
     {
@@ -29,6 +31,25 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
       'students': 34,
     },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserData();
+  }
+
+  Future<void> _fetchUserData() async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(widget.uid).get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _name = doc.data()?['name'];
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching user data: $e");
+    }
+  }
 
   void createClass() {
     final title = classTitleController.text.trim();
@@ -186,7 +207,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'UID: ${widget.uid}',
+            _name ?? 'Loading...',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 19,

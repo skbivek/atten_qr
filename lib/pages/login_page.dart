@@ -91,35 +91,27 @@ class _LoginPageState extends State<LoginPage> {
               constraints: const BoxConstraints(maxWidth: 430),
               child: Column(
                 children: [
-                  Container(
-                    height: 88,
-                    width: 88,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                         colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF4F46E5).withValues(alpha: 0.25),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.qr_code_2_rounded,
-                      color: Colors.white,
-                      size: 46,
+                  // Logo Section (Background removed, size increased)
+                  SizedBox(
+                    height: 180, // Increased size
+                    width: 180,
+                    child: Image.asset(
+                      'assets/logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(
+                          Icons.qr_code_2_rounded,
+                          color: Color(0xFF4F46E5),
+                          size: 100,
+                        );
+                      },
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 4), // Reduced gap from 16 to 4
                   const Text(
                     'Welcome Back',
                     style: TextStyle(
-                      fontSize: 29,
+                      fontSize: 32,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -127,21 +119,21 @@ class _LoginPageState extends State<LoginPage> {
                   Text(
                     'Login to continue to AttenQR',
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 16,
                       color: Colors.grey.shade600,
                     ),
                   ),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 32),
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(28),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
+                          blurRadius: 22,
+                          offset: const Offset(0, 10),
                         ),
                       ],
                     ),
@@ -208,7 +200,7 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(height: 6),
                         SizedBox(
                           width: double.infinity,
-                          height: 54,
+                          height: 56,
                           child: ElevatedButton(
                             onPressed: isLoading ? null : handleLogin,
                             style: ElevatedButton.styleFrom(
@@ -221,23 +213,23 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             child: isLoading
                                 ? const SizedBox(
-                                    height: 22,
-                                    width: 22,
+                                    height: 24,
+                                    width: 24,
                                     child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
+                                      strokeWidth: 3.0,
                                       color: Colors.white,
                                     ),
                                   )
                                 : const Text(
                                     'Login',
                                     style: TextStyle(
-                                      fontSize: 16,
+                                      fontSize: 18,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                           ),
                         ),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 20),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -265,12 +257,12 @@ class _LoginPageState extends State<LoginPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   Text(
                     'Smart Attendance System',
                     style: TextStyle(
                       color: Colors.grey.shade500,
-                      fontSize: 13,
+                      fontSize: 14,
                     ),
                   ),
                 ],

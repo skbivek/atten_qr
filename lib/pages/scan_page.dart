@@ -56,11 +56,18 @@ class _ScanPageState extends State<ScanPage> {
           throw Exception("Fake or Expired Attendance QR Code. Please scan the current one.");
         }
 
-        // Get student info
-        String studentId = FirebaseAuth.instance.currentUser?.uid ?? 'student_${DateTime.now().millisecondsSinceEpoch}';
-        String studentName = FirebaseAuth.instance.currentUser?.displayName ?? 'Guest Student';
+        // Get student info from Firestore to be certain we have the name
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid == null) throw Exception("User not authenticated.");
 
-        final attendanceRef = sessionRef.collection('attendances').doc(studentId);
+        final userDocRef = db.collection('users').doc(uid);
+        final userSnap = await transaction.get(userDocRef);
+        
+        if (!userSnap.exists) throw Exception("User profile not found.");
+        
+        String studentName = userSnap.data()?['name'] ?? 'Unknown Student';
+
+        final attendanceRef = sessionRef.collection('attendances').doc(uid);
         final attendanceSnap = await transaction.get(attendanceRef);
 
         if (attendanceSnap.exists) {
@@ -68,7 +75,7 @@ class _ScanPageState extends State<ScanPage> {
         }
 
         transaction.set(attendanceRef, {
-          'studentId': studentId,
+          'studentId': uid,
           'studentName': studentName,
           'timestamp': FieldValue.serverTimestamp(),
         });

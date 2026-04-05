@@ -16,21 +16,6 @@ class _StudentHomePageState extends State<StudentHomePage> {
   final TextEditingController joinCodeController = TextEditingController();
   String? _name;
 
-  final List<Map<String, String>> joinedClasses = [
-    {
-      'title': 'Mobile Application Development',
-      'section': 'A',
-      'teacher': 'Mr. Bivek Sharma',
-      'code': 'MAD101',
-    },
-    {
-      'title': 'Database Systems',
-      'section': 'B',
-      'teacher': 'Ms. Anusha Rai',
-      'code': 'DBS202',
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -50,8 +35,8 @@ class _StudentHomePageState extends State<StudentHomePage> {
     }
   }
 
-  void joinClass() {
-    final code = joinCodeController.text.trim();
+  Future<void> joinClass() async {
+    final code = joinCodeController.text.trim().toUpperCase();
 
     if (code.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -60,21 +45,50 @@ class _StudentHomePageState extends State<StudentHomePage> {
       return;
     }
 
-    setState(() {
-      joinedClasses.add({
-        'title': 'New Class $code',
-        'section': 'A',
-        'teacher': 'Teacher Demo',
-        'code': code.toUpperCase(),
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('classes')
+          .where('joinCode', isEqualTo: code)
+          .limit(1)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid join code')),
+        );
+        return;
+      }
+
+      final classDoc = querySnapshot.docs.first;
+      final classData = classDoc.data();
+      final studentIds = classData['studentIds'] as List<dynamic>? ?? [];
+
+      if (studentIds.contains(widget.uid)) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You have already joined this class')),
+        );
+        return;
+      }
+
+      await classDoc.reference.update({
+        'studentIds': FieldValue.arrayUnion([widget.uid])
       });
-    });
 
-    joinCodeController.clear();
-    Navigator.pop(context);
+      if (!mounted) return;
+      joinCodeController.clear();
+      Navigator.pop(context);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Class joined successfully')),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Class joined successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to join class: $e')),
+      );
+    }
   }
 
   void showJoinDialog() {
@@ -122,7 +136,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
-  Widget buildTopCard() {
+  Widget buildTopCard(List<QueryDocumentSnapshot> classDocs) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -159,7 +173,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
               Expanded(
                 child: _infoBox(
                   title: 'Joined Classes',
-                  value: joinedClasses.length.toString(),
+                  value: classDocs.length.toString(),
                 ),
               ),
               const SizedBox(width: 12),
@@ -206,7 +220,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
-  Widget buildClassCard(Map<String, String> data) {
+  Widget buildClassCard(Map<String, dynamic> data) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -261,7 +275,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Teacher: ${data['teacher'] ?? ''}',
+                        'Teacher: ${data['teacherName'] ?? ''}',
                         style: TextStyle(
                           color: Colors.grey.shade700,
                           fontSize: 13,
@@ -284,7 +298,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
                     ),
                     child: Center(
                       child: Text(
-                        'Code: ${data['code'] ?? ''}',
+                        'Code: ${data['joinCode'] ?? ''}',
                         style: const TextStyle(
                           fontWeight: FontWeight.w600,
                         ),
@@ -391,29 +405,55 @@ class _StudentHomePageState extends State<StudentHomePage> {
         onPressed: showJoinDialog,
         child: const Icon(Icons.group_add, color: Colors.white),
       ),
-      body: joinedClasses.isEmpty
-          ? buildEmptyState()
-          : SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            buildTopCard(),
-            const SizedBox(height: 20),
-            Row(
-              children: const [
-                Text(
-                  'My Classes',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
-                  ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('classes')
+            .where('studentIds', arrayContains: widget.uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          final classDocs = snapshot.data?.docs ?? [];
+          classDocs.sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aTime = (aData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+            final bTime = (bData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+            return bTime.compareTo(aTime);
+          });
+
+          if (classDocs.isEmpty) {
+            return buildEmptyState();
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                buildTopCard(classDocs),
+                const SizedBox(height: 20),
+                Row(
+                  children: const [
+                    Text(
+                      'My Classes',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 14),
+                ...classDocs.map((doc) => buildClassCard(doc.data() as Map<String, dynamic>)),
               ],
             ),
-            const SizedBox(height: 14),
-            ...joinedClasses.map(buildClassCard),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

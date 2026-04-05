@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'student_home_page.dart';
 import 'teacher_home_page.dart';
 import 'register_page.dart';
+import 'admin_home_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -46,7 +47,14 @@ class _LoginPageState extends State<LoginPage> {
 
         if (!mounted) return;
 
-        if (role == 'teacher') {
+        if (role == 'admin') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminHomePage(uid: uid),
+            ),
+          );
+        } else if (role == 'teacher') {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(

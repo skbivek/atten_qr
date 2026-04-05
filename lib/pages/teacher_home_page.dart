@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:math';
 import 'login_page.dart';
 import 'qr_session_page.dart';
 
@@ -13,24 +14,11 @@ class TeacherHomePage extends StatefulWidget {
 }
 
 class _TeacherHomePageState extends State<TeacherHomePage> {
-  final TextEditingController classTitleController = TextEditingController();
   final TextEditingController sectionController = TextEditingController();
   String? _name;
-
-  final List<Map<String, dynamic>> classes = [
-    {
-      'title': 'Mobile Application Development',
-      'section': 'A',
-      'joinCode': 'MAD101',
-      'students': 28,
-    },
-    {
-      'title': 'Database Systems',
-      'section': 'B',
-      'joinCode': 'DBS202',
-      'students': 34,
-    },
-  ];
+  bool isApproved = true; // Wait for fetch
+  List<String> assignedModules = [];
+  String? selectedModule;
 
   @override
   void initState() {
@@ -44,6 +32,8 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
       if (doc.exists && mounted) {
         setState(() {
           _name = doc.data()?['name'];
+          isApproved = doc.data()?['isApproved'] ?? false;
+          assignedModules = List<String>.from(doc.data()?['assignedModules'] ?? []);
         });
       }
     } catch (e) {
@@ -51,8 +41,8 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
     }
   }
 
-  void createClass() {
-    final title = classTitleController.text.trim();
+  Future<void> createClass() async {
+    final title = selectedModule?.trim() ?? '';
     final section = sectionController.text.trim();
 
     if (title.isEmpty || section.isEmpty) {
@@ -62,69 +52,94 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
       return;
     }
 
-    setState(() {
-      classes.add({
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final random = Random();
+    final code = String.fromCharCodes(
+      Iterable.generate(6, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
+    );
+
+    try {
+      await FirebaseFirestore.instance.collection('classes').add({
         'title': title,
         'section': section,
-        'joinCode': '${title.substring(0, title.length > 3 ? 3 : title.length).toUpperCase()}${classes.length + 100}',
-        'students': 0,
+        'joinCode': code,
+        'teacherId': widget.uid,
+        'teacherName': _name ?? 'Teacher',
+        'studentIds': [],
+        'createdAt': FieldValue.serverTimestamp(),
       });
-    });
 
-    classTitleController.clear();
-    sectionController.clear();
-    Navigator.pop(context);
+      if (!mounted) return;
+      sectionController.clear();
+      Navigator.pop(context);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Class created successfully')),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Class created successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to create class: $e')),
+      );
+    }
   }
 
   void showCreateClassDialog() {
+    selectedModule = assignedModules.isNotEmpty ? assignedModules.first : null;
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: const Text('Create New Class'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: classTitleController,
-              decoration: InputDecoration(
-                labelText: 'Class Title',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            title: const Text('Create New Class'),
+            content: assignedModules.isEmpty 
+              ? const Text("You don't have any modules assigned. Contact the admin.")
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: selectedModule,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Select Module',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: assignedModules.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                      onChanged: (val) => setState(() => selectedModule = val),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: sectionController,
+                      decoration: InputDecoration(
+                        labelText: 'Section',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: sectionController,
-              decoration: InputDecoration(
-                labelText: 'Section',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+              ElevatedButton(
+                onPressed: assignedModules.isEmpty ? null : createClass,
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
+                child: const Text('Create'),
               ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: createClass,
-            style: ElevatedButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('Create'),
-          ),
-        ],
+            ],
+          );
+        }
       ),
     );
   }
@@ -178,11 +193,13 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
     );
   }
 
-  Widget buildTopCard() {
-    final totalStudents = classes.fold<int>(
-      0,
-          (sum, item) => sum + ((item['students'] as int?) ?? 0),
-    );
+  Widget buildTopCard(List<QueryDocumentSnapshot> classDocs) {
+    int totalStudents = 0;
+    for (var doc in classDocs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final students = data['studentIds'] as List<dynamic>? ?? [];
+      totalStudents += students.length;
+    }
 
     return Container(
       width: double.infinity,
@@ -219,7 +236,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
             children: [
               _summaryCard(
                 title: 'Classes',
-                value: classes.length.toString(),
+                value: classDocs.length.toString(),
                 icon: Icons.class_,
               ),
               const SizedBox(width: 12),
@@ -241,7 +258,67 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
     );
   }
 
-  Widget buildClassCard(Map<String, dynamic> data) {
+  void showEnrolledStudents(List<dynamic>? studentIds) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        if (studentIds == null || studentIds.isEmpty) {
+          return const AlertDialog(
+            title: Text('Enrolled Students'),
+            content: Text('No students enrolled in this class yet.'),
+          );
+        }
+
+        return AlertDialog(
+          title: const Text('Enrolled Students'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: FutureBuilder<List<DocumentSnapshot>>(
+              future: Future.wait(studentIds.map((id) =>
+                  FirebaseFirestore.instance.collection('users').doc(id.toString()).get())),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(
+                    height: 100,
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return const Text('Error loading students.');
+                }
+                final docs = snapshot.data ?? [];
+
+                return ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data() as Map<String, dynamic>?;
+                    if (data == null) return const SizedBox.shrink();
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFF0F766E).withOpacity(0.1),
+                        child: const Icon(Icons.person, color: Color(0xFF0F766E)),
+                      ),
+                      title: Text(data['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(data['email'] ?? ''),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget buildClassCard(String classId, Map<String, dynamic> data) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -296,7 +373,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Students: ${data['students'] ?? 0}',
+                        'Students: ${((data['studentIds'] as List<dynamic>?)?.length ?? 0)}',
                         style: TextStyle(
                           color: Colors.grey.shade700,
                           fontSize: 13,
@@ -311,48 +388,40 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
             Row(
               children: [
                 Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(12),
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Center(
-                      child: Text(
-                        'Join Code: ${data['joinCode']}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                    icon: const Icon(Icons.people_alt, size: 20),
+                    label: const Text('Students'),
+                    onPressed: () => showEnrolledStudents(data['studentIds'] as List<dynamic>?),
                   ),
                 ),
                 const SizedBox(width: 10),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F766E),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 12,
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F766E),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.qr_code),
-                  label: const Text('Start QR'),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => QRSessionPage(
-                          classTitle: data['title'] ?? 'Class',
-                          joinCode: data['joinCode'] ?? '',
+                    icon: const Icon(Icons.qr_code),
+                    label: const Text('Start QR'),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => QRSessionPage(
+                            classId: classId,
+                            classTitle: data['title'] ?? 'Class',
+                            joinCode: data['joinCode'] ?? '',
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -399,7 +468,6 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
 
   @override
   void dispose() {
-    classTitleController.dispose();
     sectionController.dispose();
     super.dispose();
   }
@@ -423,34 +491,74 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: !isApproved ? null : FloatingActionButton(
         backgroundColor: const Color(0xFF0F766E),
         onPressed: showCreateClassDialog,
         child: const Icon(Icons.add, color: Colors.white),
       ),
-      body: classes.isEmpty
-          ? buildEmptyState()
-          : SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            buildTopCard(),
-            const SizedBox(height: 20),
-            Row(
-              children: const [
-                Text(
-                  'My Classes',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
-                  ),
+      body: !isApproved
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.pending_actions, size: 80, color: Colors.orange),
+                  const SizedBox(height: 16),
+                  const Text("Account Pending Approval", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text("Please wait for the admin to approve your account.", style: TextStyle(color: Colors.grey.shade600)),
+                ]
+              )
+            )
+          : StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('classes')
+            .where('teacherId', isEqualTo: widget.uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          final classDocs = snapshot.data?.docs ?? [];
+          // Optional sorting by createdAt on the client to avoid missing index errors
+          classDocs.sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aTime = (aData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+            final bTime = (bData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+            return bTime.compareTo(aTime);
+          });
+
+          if (classDocs.isEmpty) {
+            return buildEmptyState();
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                buildTopCard(classDocs),
+                const SizedBox(height: 20),
+                Row(
+                  children: const [
+                    Text(
+                      'My Classes',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 14),
+                ...classDocs.map((doc) => buildClassCard(doc.id, doc.data() as Map<String, dynamic>)),
               ],
             ),
-            const SizedBox(height: 14),
-            ...classes.map(buildClassCard),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

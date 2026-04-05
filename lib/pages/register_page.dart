@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'student_home_page.dart';
 import 'teacher_home_page.dart';
+import 'admin_home_page.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -46,17 +47,31 @@ class _RegisterPageState extends State<RegisterPage> {
         await user.updateDisplayName(name);
 
         // Store role in Firestore
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        final effectiveRole = email.toLowerCase() == 'admin@atten.com' ? 'admin' : selectedRole;
+        final userData = {
           'name': name,
           'email': email,
-          'role': selectedRole,
+          'role': effectiveRole,
           'createdAt': FieldValue.serverTimestamp(),
-        });
+        };
+
+        if (effectiveRole == 'teacher') {
+          userData['isApproved'] = false;
+          userData['assignedModules'] = [];
+        }
+
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set(userData);
 
         if (!mounted) return;
         
         // Navigate based on selected role
-        if (selectedRole == 'teacher') {
+        if (effectiveRole == 'admin') {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => AdminHomePage(uid: user.uid)),
+            (route) => false,
+          );
+        } else if (effectiveRole == 'teacher') {
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (_) => TeacherHomePage(uid: user.uid)),

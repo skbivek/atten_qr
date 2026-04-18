@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_page.dart';
 import 'scan_page.dart';
+import 'student_class_attendance_page.dart';
 
 class StudentHomePage extends StatefulWidget {
   final String uid;
@@ -15,24 +17,35 @@ class StudentHomePage extends StatefulWidget {
 class _StudentHomePageState extends State<StudentHomePage> {
   final TextEditingController joinCodeController = TextEditingController();
   String? _name;
+  StreamSubscription<DocumentSnapshot>? _userSubscription;
+  List<dynamic> _warnings = [];
+  bool _hasWarning = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchUserData();
+    _listenUserData();
   }
 
-  Future<void> _fetchUserData() async {
-    try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(widget.uid).get();
+  void _listenUserData() {
+    _userSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.uid)
+        .snapshots()
+        .listen((doc) {
       if (doc.exists && mounted) {
         setState(() {
-          _name = doc.data()?['name'];
+          final data = doc.data();
+          if (data != null) {
+            _name = data['name'];
+            _warnings = data['warnings'] ?? [];
+            _hasWarning = data['hasWarning'] ?? false;
+          }
         });
       }
-    } catch (e) {
+    }, onError: (e) {
       debugPrint("Error fetching user data: $e");
-    }
+    });
   }
 
   Future<void> joinClass() async {
@@ -176,13 +189,6 @@ class _StudentHomePageState extends State<StudentHomePage> {
                   value: classDocs.length.toString(),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _infoBox(
-                  title: 'Attendance',
-                  value: '92%',
-                ),
-              ),
             ],
           ),
         ],
@@ -284,6 +290,22 @@ class _StudentHomePageState extends State<StudentHomePage> {
                     ],
                   ),
                 ),
+                IconButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => StudentClassAttendancePage(
+                          classTitle: data['title'] ?? 'Class',
+                          joinCode: data['joinCode'] ?? '',
+                          studentId: widget.uid,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.bar_chart, color: Color(0xFF4F46E5)),
+                  tooltip: 'View Attendance',
+                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -375,8 +397,66 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
+  Future<void> _dismissWarnings() async {
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(widget.uid).update({
+        'warnings': [],
+        'hasWarning': false,
+      });
+    } catch (e) {
+      debugPrint("Failed to dismiss warnings: $e");
+    }
+  }
+
+  Widget _buildWarningBanner() {
+    if (!_hasWarning || _warnings.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        border: Border.all(color: Colors.red.shade200),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.red),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Low Attendance Warning',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.close, color: Colors.red),
+                onPressed: _dismissWarnings,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ..._warnings.map((w) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text('• $w', style: const TextStyle(color: Colors.red)),
+              )),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _userSubscription?.cancel();
     joinCodeController.dispose();
     super.dispose();
   }
@@ -435,6 +515,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
+                _buildWarningBanner(),
                 buildTopCard(classDocs),
                 const SizedBox(height: 20),
                 Row(

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'login_page.dart';
 import 'admin_class_attendance_page.dart';
+import 'admin_student_attendance_summary_page.dart';
 
 class AdminHomePage extends StatefulWidget {
   final String uid;
@@ -18,7 +19,7 @@ class _AdminHomePageState extends State<AdminHomePage> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -61,6 +62,7 @@ class _AdminHomePageState extends State<AdminHomePage> with SingleTickerProvider
             Tab(text: 'Modules', icon: Icon(Icons.library_books)),
             Tab(text: 'Teachers', icon: Icon(Icons.badge)),
             Tab(text: 'Classes', icon: Icon(Icons.class_)),
+            Tab(text: 'Students', icon: Icon(Icons.people)),
           ],
         ),
       ),
@@ -70,6 +72,7 @@ class _AdminHomePageState extends State<AdminHomePage> with SingleTickerProvider
           ModulesTab(),
           TeachersTab(),
           ClassesTab(),
+          StudentsTab(),
         ],
       ),
     );
@@ -391,6 +394,173 @@ class ClassesTab extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class StudentsTab extends StatelessWidget {
+  const StudentsTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('users').where('role', isEqualTo: 'student').snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('No students found.'));
+        }
+
+        final docs = snapshot.data!.docs;
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final data = docs[index].data() as Map<String, dynamic>;
+            final studentId = docs[index].id;
+            final studentName = data['name'] ?? 'Unknown Student';
+            final studentEmail = data['email'] ?? 'No Email';
+            final hasWarning = data['hasWarning'] == true;
+
+            return StudentListItem(
+              studentId: studentId,
+              studentName: studentName,
+              studentEmail: studentEmail,
+              hasWarning: hasWarning,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class StudentListItem extends StatefulWidget {
+  final String studentId;
+  final String studentName;
+  final String studentEmail;
+  final bool hasWarning;
+
+  const StudentListItem({
+    super.key,
+    required this.studentId,
+    required this.studentName,
+    required this.studentEmail,
+    required this.hasWarning,
+  });
+
+  @override
+  State<StudentListItem> createState() => _StudentListItemState();
+}
+
+class _StudentListItemState extends State<StudentListItem> {
+  bool? _hasLowAttendance;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLowAttendance();
+  }
+
+  Future<void> _checkLowAttendance() async {
+    try {
+      final classesQuery = await FirebaseFirestore.instance
+          .collection('classes')
+          .where('studentIds', arrayContains: widget.studentId)
+          .get();
+
+      bool foundLow = false;
+
+      for (var classDoc in classesQuery.docs) {
+        final classData = classDoc.data();
+        final joinCode = classData['joinCode'];
+
+        final sessionsQuery = await FirebaseFirestore.instance
+            .collection('sessions')
+            .where('joinCode', isEqualTo: joinCode)
+            .get();
+
+        int totalSessions = 0;
+        int presentSessions = 0;
+
+        for (var sessionDoc in sessionsQuery.docs) {
+          totalSessions++;
+          final attendances = await FirebaseFirestore.instance
+              .collection('sessions')
+              .doc(sessionDoc.id)
+              .collection('attendances')
+              .where('studentId', isEqualTo: widget.studentId)
+              .limit(1)
+              .get();
+
+          if (attendances.docs.isNotEmpty) {
+            final data = attendances.docs.first.data();
+            final status = data['status'] ?? 'present';
+            if (status == 'present') {
+              presentSessions++;
+            }
+          }
+        }
+
+        if (totalSessions > 0) {
+          final percentage = (presentSessions / totalSessions) * 100;
+          if (percentage < 40.0) {
+            foundLow = true;
+            break;
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _hasLowAttendance = foundLow;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error checking low attendance: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isRedIcon = _hasLowAttendance == true;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        leading: CircleAvatar(
+          backgroundColor: widget.hasWarning ? Colors.red.withValues(alpha: 0.1) : const Color(0xFF4F46E5).withValues(alpha: 0.1),
+          child: Icon(
+            widget.hasWarning ? Icons.warning_amber_rounded : Icons.person,
+            color: widget.hasWarning ? Colors.red : const Color(0xFF4F46E5),
+          ),
+        ),
+        title: Text(widget.studentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        subtitle: Text(widget.studentEmail),
+        trailing: _hasLowAttendance == null
+            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            : Icon(
+                Icons.analytics,
+                size: 20,
+                color: isRedIcon ? Colors.red : Colors.grey.shade600,
+              ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminStudentAttendanceSummaryPage(
+                studentId: widget.studentId,
+                studentName: widget.studentName,
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

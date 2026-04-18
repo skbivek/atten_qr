@@ -245,12 +245,6 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
                 value: totalStudents.toString(),
                 icon: Icons.groups,
               ),
-              const SizedBox(width: 12),
-              _summaryCard(
-                title: 'QR Sessions',
-                value: '12',
-                icon: Icons.qr_code,
-              ),
             ],
           ),
         ],
@@ -382,20 +376,29 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
                     ],
                   ),
                 ),
+                IconButton(
+                  onPressed: () => showEnrolledStudents(data['studentIds'] as List<dynamic>?),
+                  icon: const Icon(Icons.people_alt, color: Color(0xFF0F766E)),
+                  tooltip: 'View Students',
+                ),
               ],
             ),
             const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    icon: const Icon(Icons.people_alt, size: 20),
-                    label: const Text('Students'),
-                    onPressed: () => showEnrolledStudents(data['studentIds'] as List<dynamic>?),
+                    child: Center(
+                      child: SelectableText(
+                        'Code: ${data['joinCode'] ?? ''}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),

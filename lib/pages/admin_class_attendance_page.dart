@@ -20,7 +20,7 @@ class AdminClassAttendancePage extends StatefulWidget {
 
 class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
   bool isLoading = true;
-  List<Map<String, dynamic>> flatRecords = [];
+  List<Map<String, dynamic>> sessionsWithRecords = [];
   Map<String, double> studentPercentages = {};
 
   @override
@@ -36,7 +36,7 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
           .where('joinCode', isEqualTo: widget.joinCode)
           .get();
 
-      List<Map<String, dynamic>> tempRecords = [];
+      List<Map<String, dynamic>> tempSessions = [];
       Map<String, int> totalSessionsPerStudent = {};
       Map<String, int> presentSessionsPerStudent = {};
 
@@ -48,6 +48,8 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
             .doc(sessionDoc.id)
             .collection('attendances')
             .get();
+
+        List<Map<String, dynamic>> sessionRecords = [];
 
         for (var attDoc in attendances.docs) {
           final data = attDoc.data();
@@ -61,7 +63,7 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
             presentSessionsPerStudent[studentId] = (presentSessionsPerStudent[studentId] ?? 0) + 1;
           }
 
-          tempRecords.add({
+          sessionRecords.add({
             'studentId': studentId,
             'studentName': studentName,
             'status': status,
@@ -70,6 +72,17 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
             'rawDate': attTime,
           });
         }
+        
+        final dateStr = "${sessionTime.year}-${sessionTime.month.toString().padLeft(2, '0')}-${sessionTime.day.toString().padLeft(2, '0')}";
+        final timeStr = "${sessionTime.hour.toString().padLeft(2, '0')}:${sessionTime.minute.toString().padLeft(2, '0')}";
+
+        tempSessions.add({
+          'sessionId': sessionDoc.id,
+          'date': dateStr,
+          'time': timeStr,
+          'rawDate': sessionTime,
+          'records': sessionRecords,
+        });
       }
 
       // Calculate percentages
@@ -78,11 +91,11 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
         studentPercentages[id] = (present / total) * 100;
       });
 
-      tempRecords.sort((a, b) => (b['rawDate'] as DateTime).compareTo(a['rawDate'] as DateTime));
+      tempSessions.sort((a, b) => (b['rawDate'] as DateTime).compareTo(a['rawDate'] as DateTime));
 
       if (mounted) {
         setState(() {
-          flatRecords = tempRecords;
+          sessionsWithRecords = tempSessions;
           isLoading = false;
         });
       }
@@ -95,19 +108,21 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
   }
 
   void exportToClipboard() {
-    if (flatRecords.isEmpty) {
+    if (sessionsWithRecords.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No data to export!')));
       return;
     }
 
     final StringBuffer csv = StringBuffer();
-    csv.writeln("Student Name,Date,Time,Status,Percentage");
+    csv.writeln("Session Date,Session Time,Student Name,Status,Percentage");
 
-    for (var record in flatRecords) {
-      final studentId = record['studentId'];
-      final percentage = studentPercentages[studentId]?.toStringAsFixed(1) ?? '0.0';
-      
-      csv.writeln("${record['studentName']},${record['date']},${record['time']},${record['status']},$percentage%");
+    for (var session in sessionsWithRecords) {
+      final records = session['records'] as List<Map<String, dynamic>>;
+      for (var record in records) {
+        final studentId = record['studentId'];
+        final percentage = studentPercentages[studentId]?.toStringAsFixed(1) ?? '0.0';
+        csv.writeln("${session['date']},${session['time']},${record['studentName']},${record['status']},$percentage%");
+      }
     }
 
     Clipboard.setData(ClipboardData(text: csv.toString())).then((_) {
@@ -140,60 +155,71 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : flatRecords.isEmpty
+          : sessionsWithRecords.isEmpty
               ? const Center(child: Text('No attendance history found.'))
               : ListView.builder(
                   padding: const EdgeInsets.all(16),
-                  itemCount: flatRecords.length,
+                  itemCount: sessionsWithRecords.length,
                   itemBuilder: (context, index) {
-                    final record = flatRecords[index];
-                    final isPresent = record['status'] == 'present';
-                    final percentage = studentPercentages[record['studentId']]?.toStringAsFixed(1) ?? '0.0';
+                    final session = sessionsWithRecords[index];
+                    final records = session['records'] as List<Map<String, dynamic>>;
+                    final presentCount = records.where((r) => r['status'] == 'present').length;
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: isPresent ? Colors.green.shade50 : Colors.red.shade50,
-                              child: Icon(
-                                isPresent ? Icons.check : Icons.close,
-                                color: isPresent ? Colors.green.shade600 : Colors.red.shade600,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    record['studentName'],
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                      "${record['date']} at ${record['time']} | Total: $percentage%"),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          collapsedIconColor: const Color(0xFF4F46E5),
+                          iconColor: const Color(0xFF4F46E5),
+                          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          title: Text(
+                            "${session['date']} at ${session['time']}",
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          subtitle: Text(
+                            'Total Attendees: $presentCount/${records.length}',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                          children: records.map((record) {
+                            final isPresent = record['status'] == 'present';
+                            final percentage = studentPercentages[record['studentId']]?.toStringAsFixed(1) ?? '0.0';
+
+                            return Container(
                               decoration: BoxDecoration(
-                                color: isPresent ? Colors.green.shade50 : Colors.red.shade50,
-                                borderRadius: BorderRadius.circular(12),
+                                border: Border(top: BorderSide(color: Colors.grey.shade200)),
                               ),
-                              child: Text(
-                                isPresent ? 'Present' : 'Absent',
-                                style: TextStyle(
-                                  color: isPresent ? Colors.green.shade700 : Colors.red.shade700,
-                                  fontWeight: FontWeight.w600,
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: isPresent ? Colors.green.shade50 : Colors.red.shade50,
+                                  child: Icon(
+                                    isPresent ? Icons.check : Icons.close,
+                                    color: isPresent ? Colors.green.shade600 : Colors.red.shade600,
+                                  ),
+                                ),
+                                title: Text(
+                                  record['studentName'],
+                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                subtitle: Text("Performance: $percentage%"),
+                                trailing: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: isPresent ? Colors.green.shade50 : Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    isPresent ? 'Present' : 'Absent',
+                                    style: TextStyle(
+                                      color: isPresent ? Colors.green.shade700 : Colors.red.shade700,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            );
+                          }).toList(),
                         ),
                       ),
                     );

@@ -20,6 +20,43 @@ class _LoginPageState extends State<LoginPage> {
   bool obscurePassword = true;
   bool isLoading = false;
 
+  Future<void> handleForgotPassword() async {
+    final email = emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your email address in the field above to reset your password.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password reset link sent! Please check your email.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message ?? 'Failed to send password reset email'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
   void handleLogin() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
@@ -195,13 +232,7 @@ class _LoginPageState extends State<LoginPage> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Forgot password clicked'),
-                                ),
-                              );
-                            },
+                            onPressed: handleForgotPassword,
                             child: const Text('Forgot Password?'),
                           ),
                         ),

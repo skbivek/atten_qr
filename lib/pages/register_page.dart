@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:math';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -36,6 +39,93 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => isLoading = true);
 
     try {
+      // 1. Generate OTP and Expiry Time
+      final String otp = (Random().nextInt(900000) + 100000).toString(); // 6 digits
+      final now = DateTime.now().add(const Duration(minutes: 15));
+      final String timeString = "${now.hour > 12 ? now.hour - 12 : now.hour == 0 ? 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+
+      // 2. Send OTP via EmailJS
+      final url = Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
+      final emailResponse = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'service_id': 'service_klvw7ir', 
+          'template_id': 'template_9x0nmyq', 
+          'user_id': 'mRKia_SPZmCHFsTYE',
+          'accessToken': 'gx1GYDfXwnXc4BEbwBX32',
+          'template_params': {
+            'email': email,
+            'passcode': otp,
+            'time': timeString,
+          }
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (emailResponse.statusCode != 200) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send OTP email: ${emailResponse.body}')),
+        );
+        return;
+      }
+
+      setState(() => isLoading = false);
+
+      // 3. Show OTP Entry Dialog
+      final bool? isVerified = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          final otpController = TextEditingController();
+          return AlertDialog(
+            title: const Text('Verify Email'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Please enter the 6-digit OTP we just sent to your email.'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: otpController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Enter OTP',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (otpController.text.trim() == otp) {
+                    Navigator.pop(dialogContext, true);
+                  } else {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(content: Text('Invalid OTP. Please try again.')),
+                    );
+                  }
+                },
+                child: const Text('Verify'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (isVerified != true) {
+        return; // User cancelled or failed OTP Verification
+      }
+
+      // 4. Create the Firebase User if verified
+      setState(() => isLoading = true);
+
       final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,

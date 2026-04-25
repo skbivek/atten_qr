@@ -290,69 +290,62 @@ class _StudentHomePageState extends State<StudentHomePage> {
                     ],
                   ),
                 ),
-                IconButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => StudentClassAttendancePage(
-                          classTitle: data['title'] ?? 'Class',
-                          joinCode: data['joinCode'] ?? '',
-                          studentId: widget.uid,
-                        ),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.bar_chart, color: Color(0xFF4F46E5)),
-                  tooltip: 'View Attendance',
-                ),
               ],
             ),
             const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'Code: ${data['joinCode'] ?? ''}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                        ),
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey.shade100,
+                      foregroundColor: Colors.black87,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
                     ),
+                    icon: const Icon(Icons.history, size: 20),
+                    label: const Text('History', style: TextStyle(fontWeight: FontWeight.w600)),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => StudentClassAttendancePage(
+                            classTitle: data['title'] ?? 'Class',
+                            joinCode: data['joinCode'] ?? '',
+                            studentId: widget.uid,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 10),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4F46E5),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.qr_code_scanner),
-                  label: const Text('Scan'),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ScanPage(
-                          classTitle: data['title'] ?? 'Class',
-                        ),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4F46E5),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    );
-                  },
+                    ),
+                    icon: const Icon(Icons.qr_code_scanner, size: 20),
+                    label: const Text('Scan Now', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ScanPage(
+                            classTitle: data['title'] ?? 'Class',
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),

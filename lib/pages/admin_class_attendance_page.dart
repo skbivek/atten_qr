@@ -21,7 +21,6 @@ class AdminClassAttendancePage extends StatefulWidget {
 class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
   bool isLoading = true;
   List<Map<String, dynamic>> sessionsWithRecords = [];
-  Map<String, double> studentPercentages = {};
 
   @override
   void initState() {
@@ -31,17 +30,29 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
 
   Future<void> _fetchAttendanceData() async {
     try {
+      // 1. Get all sessions for this joinCode
       final sessionsQuery = await FirebaseFirestore.instance
           .collection('sessions')
           .where('joinCode', isEqualTo: widget.joinCode)
           .get();
 
-      List<Map<String, dynamic>> tempSessions = [];
-      Map<String, int> totalSessionsPerStudent = {};
-      Map<String, int> presentSessionsPerStudent = {};
+      // Sort sessions chronologically (oldest first) to calculate cumulative percentage correctly
+      final List<QueryDocumentSnapshot> sortedSessions = sessionsQuery.docs.toList();
+      sortedSessions.sort((a, b) {
+        final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+        final bTime = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+        if (aTime == null || bTime == null) return 0;
+        return aTime.compareTo(bTime);
+      });
 
-      for (var sessionDoc in sessionsQuery.docs) {
-        final sessionTime = (sessionDoc.data()['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+      List<Map<String, dynamic>> tempSessions = [];
+      Map<String, int> presentSessionsPerStudent = {};
+      int sessionCounter = 0;
+
+      for (var sessionDoc in sortedSessions) {
+        sessionCounter++;
+        final sessionData = sessionDoc.data() as Map<String, dynamic>;
+        final sessionTime = (sessionData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
 
         final attendances = await FirebaseFirestore.instance
             .collection('sessions')
@@ -58,10 +69,13 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
           final String status = data['status'] ?? 'present';
           final attTime = (data['timestamp'] as Timestamp?)?.toDate() ?? sessionTime;
 
-          totalSessionsPerStudent[studentId] = (totalSessionsPerStudent[studentId] ?? 0) + 1;
           if (status == 'present') {
             presentSessionsPerStudent[studentId] = (presentSessionsPerStudent[studentId] ?? 0) + 1;
           }
+
+          // Safely calculate cumulative percentage
+          final int presentCount = presentSessionsPerStudent[studentId] ?? 0;
+          final double cumulativePercentage = (presentCount / sessionCounter) * 100;
 
           sessionRecords.add({
             'studentId': studentId,
@@ -70,6 +84,7 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
             'date': "${attTime.year}-${attTime.month.toString().padLeft(2, '0')}-${attTime.day.toString().padLeft(2, '0')}",
             'time': "${attTime.hour.toString().padLeft(2, '0')}:${attTime.minute.toString().padLeft(2, '0')}",
             'rawDate': attTime,
+            'cumulativePercentage': cumulativePercentage,
           });
         }
         
@@ -85,12 +100,7 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
         });
       }
 
-      // Calculate percentages
-      totalSessionsPerStudent.forEach((id, total) {
-        final present = presentSessionsPerStudent[id] ?? 0;
-        studentPercentages[id] = (present / total) * 100;
-      });
-
+      // Sort descending (newest first) for display in the UI
       tempSessions.sort((a, b) => (b['rawDate'] as DateTime).compareTo(a['rawDate'] as DateTime));
 
       if (mounted) {
@@ -100,6 +110,7 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
         });
       }
     } catch (e) {
+      debugPrint("Error fetching data: $e");
       if (mounted) {
         setState(() => isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -107,29 +118,22 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
     }
   }
 
-  void exportToClipboard() {
-    if (sessionsWithRecords.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No data to export!')));
-      return;
-    }
-
+  void exportSessionToClipboard(Map<String, dynamic> session) {
     final StringBuffer csv = StringBuffer();
-    csv.writeln("Session Date,Session Time,Student Name,Status,Percentage");
+    // Use Tab separator for better Excel compatibility
+    csv.writeln("Session Date\tSession Time\tStudent Name\tStatus\tAttendance Rate");
 
-    for (var session in sessionsWithRecords) {
-      final records = session['records'] as List<Map<String, dynamic>>;
-      for (var record in records) {
-        final studentId = record['studentId'];
-        final percentage = studentPercentages[studentId]?.toStringAsFixed(1) ?? '0.0';
-        csv.writeln("${session['date']},${session['time']},${record['studentName']},${record['status']},$percentage%");
-      }
+    final records = session['records'] as List<Map<String, dynamic>>;
+    for (var record in records) {
+      final percentage = (record['cumulativePercentage'] as double?)?.toStringAsFixed(1) ?? '0.0';
+      csv.writeln("${session['date']}\t${session['time']}\t${record['studentName']}\t${record['status']}\t$percentage%");
     }
 
     Clipboard.setData(ClipboardData(text: csv.toString())).then((_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('CSV copied to clipboard Successfully!'),
+            content: Text('Data copied! Simply paste into Excel.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -146,12 +150,6 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 0,
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: isLoading ? null : exportToClipboard,
-        icon: const Icon(Icons.copy, color: Colors.white),
-        label: const Text('Export CSV', style: TextStyle(color: Colors.white)),
-        backgroundColor: const Color(0xFF4F46E5),
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -182,9 +180,24 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
                             'Total Attendees: $presentCount/${records.length}',
                             style: TextStyle(color: Colors.grey.shade600),
                           ),
-                          children: records.map((record) {
-                            final isPresent = record['status'] == 'present';
-                            final percentage = studentPercentages[record['studentId']]?.toStringAsFixed(1) ?? '0.0';
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                                color: Colors.indigo.shade50.withOpacity(0.3),
+                              ),
+                              child: ListTile(
+                                leading: const Icon(Icons.file_download_outlined, color: Color(0xFF4F46E5)),
+                                title: const Text(
+                                  'Export to CSV',
+                                  style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF4F46E5)),
+                                ),
+                                onTap: () => exportSessionToClipboard(session),
+                              ),
+                            ),
+                            ...records.map((record) {
+                              final isPresent = record['status'] == 'present';
+                              final percentage = (record['cumulativePercentage'] as double?)?.toStringAsFixed(1) ?? '0.0';
 
                             return Container(
                               decoration: BoxDecoration(
@@ -220,6 +233,7 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
                               ),
                             );
                           }).toList(),
+                          ],
                         ),
                       ),
                     );

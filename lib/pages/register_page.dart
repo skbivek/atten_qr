@@ -24,6 +24,7 @@ class _RegisterPageState extends State<RegisterPage> {
   bool isLoading = false;
   String selectedRole = 'student';
 
+  // Primary method to handle new user registration and OTP verification
   Future<void> handleRegister() async {
     final name = nameController.text.trim();
     final email = emailController.text.trim();
@@ -39,12 +40,13 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => isLoading = true);
 
     try {
-      // 1. Generate OTP and Expiry Time
-      final String otp = (Random().nextInt(900000) + 100000).toString(); // 6 digits
+      // Generate a random 6-digit OTP for email verification
+      final String otp = (Random().nextInt(900000) + 100000).toString();
       final now = DateTime.now().add(const Duration(minutes: 15));
       final String timeString = "${now.hour > 12 ? now.hour - 12 : now.hour == 0 ? 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
-      // 2. Send OTP via EmailJS
+      // Send the OTP using the EmailJS REST API
+      // This allows us to send custom email templates without needing a backend server
       final url = Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
       final emailResponse = await http.post(
         url,
@@ -74,7 +76,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
       setState(() => isLoading = false);
 
-      // 3. Show OTP Entry Dialog
+      // Show verification dialog
       final bool? isVerified = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -123,7 +125,7 @@ class _RegisterPageState extends State<RegisterPage> {
         return; // User cancelled or failed OTP Verification
       }
 
-      // 4. Create the Firebase User if verified
+      // Create user in Firebase auth
       setState(() => isLoading = true);
 
       final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
@@ -133,10 +135,11 @@ class _RegisterPageState extends State<RegisterPage> {
 
       final user = userCredential.user;
       if (user != null) {
-        // Update display name
+        // Set display name
         await user.updateDisplayName(name);
 
         // Store role in Firestore
+        // Hardcode admin email for demonstration purposes, otherwise use selected role
         final effectiveRole = email.toLowerCase() == 'admin@atten.com' ? 'admin' : selectedRole;
         final userData = {
           'name': name,
@@ -187,12 +190,14 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   void dispose() {
+    // Free up resources used by the text controllers when the page is destroyed
     nameController.dispose();
     emailController.dispose();
     passwordController.dispose();
     super.dispose();
   }
 
+  // Helper method to create consistent role selection buttons (Student/Teacher)
   Widget roleButton({
     required String value,
     required String label,

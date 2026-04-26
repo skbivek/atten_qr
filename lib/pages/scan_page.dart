@@ -17,16 +17,22 @@ class _ScanPageState extends State<ScanPage> {
   final MobileScannerController _scannerController = MobileScannerController();
   bool _isProcessing = false;
 
+  // Primary function that handles the check-in logic when a QR code is detected
   Future<void> _processCheckIn(String qrRawData) async {
+    // Prevent multiple check-ins if one is already processing
     if (_isProcessing) return;
+    
+    // Update UI to show loading indicator
     setState(() {
       _isProcessing = true;
     });
 
+    // Pause the camera so it doesn't keep scanning while we talk to Firebase
     _scannerController.stop();
 
     try {
       final data = jsonDecode(qrRawData);
+      // Extract session ID and the current rotating token
       final sessionId = data['s'];
       final token = data['t'];
 
@@ -37,8 +43,8 @@ class _ScanPageState extends State<ScanPage> {
       // 1. Validate token and record attendance safely
       final db = FirebaseFirestore.instance;
       
-      // We use a transaction to represent server-side constraints.
-      // In a production environment with strict rules, this logic would run in a Cloud Function or be enforced by Firestore Security Rules.
+      // Run transaction to ensure token validation and attendance save are atomic
+      // This prevents race conditions if a student scans multiple times quickly
       await db.runTransaction((transaction) async {
         final sessionRef = db.collection('sessions').doc(sessionId);
         final sessionSnap = await transaction.get(sessionRef);
@@ -48,10 +54,13 @@ class _ScanPageState extends State<ScanPage> {
         }
 
         final sessionData = sessionSnap.data()!;
+        
+        // Ensure the teacher hasn't ended the session yet
         if (sessionData['isActive'] != true) {
           throw Exception("This session is no longer active.");
         }
 
+        // CRITICAL SECURITY CHECK: Ensure scanned token matches the currently active 30s token
         if (sessionData['activeToken'] != token) {
           throw Exception("Fake or Expired Attendance QR Code. Please scan the current one.");
         }
@@ -70,10 +79,12 @@ class _ScanPageState extends State<ScanPage> {
         final attendanceRef = sessionRef.collection('attendances').doc(uid);
         final attendanceSnap = await transaction.get(attendanceRef);
 
+        // Prevent duplicate check-ins for the same session
         if (attendanceSnap.exists) {
           throw Exception("You have already checked in.");
         }
 
+        // Finally, save the attendance record with a server-side timestamp
         transaction.set(attendanceRef, {
           'studentId': uid,
           'studentName': studentName,
@@ -103,6 +114,7 @@ class _ScanPageState extends State<ScanPage> {
 
   @override
   void dispose() {
+    // Clean up camera resources when closing the page to prevent memory leaks
     _scannerController.dispose();
     super.dispose();
   }
@@ -119,18 +131,22 @@ class _ScanPageState extends State<ScanPage> {
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
+          // The camera view that continuously looks for QR codes
           MobileScanner(
             controller: _scannerController,
             onDetect: (capture) {
               final List<Barcode> barcodes = capture.barcodes;
+              // Iterate through detected barcodes (usually just one)
               for (final barcode in barcodes) {
                 if (barcode.rawValue != null) {
+                  // Trigger the check-in process with the raw text from the QR
                   _processCheckIn(barcode.rawValue!);
-                  break;
+                  break; // Stop after finding the first valid code
                 }
               }
             },
           ),
+          // Loading overlay shown when checking in
           if (_isProcessing)
             Container(
               color: Colors.black54,

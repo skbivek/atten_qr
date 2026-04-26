@@ -25,6 +25,7 @@ class _AdminStudentAttendanceSummaryPageState extends State<AdminStudentAttendan
     _fetchData();
   }
 
+  // Aggregates attendance statistics across all classes for a single student
   Future<void> _fetchData() async {
     try {
       final classesQuery = await FirebaseFirestore.instance
@@ -57,6 +58,7 @@ class _AdminStudentAttendanceSummaryPageState extends State<AdminStudentAttendan
               .limit(1)
               .get();
 
+          // If the query found a document, the student was either present or marked explicitly absent
           if (attendances.docs.isNotEmpty) {
             final data = attendances.docs.first.data();
             final status = data['status'] ?? 'present';
@@ -93,6 +95,8 @@ class _AdminStudentAttendanceSummaryPageState extends State<AdminStudentAttendan
 
   void _warnStudent(String classTitle, double percentage) async {
     try {
+      // Manual Warning Trigger: Admin can click "Warn Student" on low attendance
+      // This pushes a warning directly to the student's dashboard using arrayUnion
       await FirebaseFirestore.instance.collection('users').doc(widget.studentId).update({
         'warnings': FieldValue.arrayUnion([
           'WARNING: Your attendance in $classTitle is below 40% (${percentage.toStringAsFixed(1)}%). Please contact your instructor immediately.'

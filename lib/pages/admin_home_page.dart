@@ -19,6 +19,7 @@ class _AdminHomePageState extends State<AdminHomePage> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
+    // Initialize the TabController for 4 separate admin views (Modules, Teachers, Classes, Students)
     _tabController = TabController(length: 4, vsync: this);
   }
 
@@ -28,13 +29,14 @@ class _AdminHomePageState extends State<AdminHomePage> with SingleTickerProvider
     super.dispose();
   }
 
+  // Signs the admin out and returns to the login screen
   void logout() async {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
+      (route) => false, // Remove all previous routes so user can't press "Back" to enter
     );
   }
 
@@ -90,6 +92,7 @@ class _ModulesTabState extends State<ModulesTab> {
   final titleController = TextEditingController();
   final codeController = TextEditingController();
 
+  // Method to create a new module/subject that teachers can later be assigned to
   void createModule() async {
     final title = titleController.text.trim();
     final code = codeController.text.trim().toUpperCase();
@@ -100,6 +103,7 @@ class _ModulesTabState extends State<ModulesTab> {
     }
 
     try {
+      // Add a new document to the 'modules' collection
       await FirebaseFirestore.instance.collection('modules').add({
         'title': title,
         'code': code,
@@ -108,7 +112,7 @@ class _ModulesTabState extends State<ModulesTab> {
       if (!mounted) return;
       titleController.clear();
       codeController.clear();
-      Navigator.pop(context);
+      Navigator.pop(context); // Close the dialog
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Module created!')));
     } catch (e) {
       if (!mounted) return;
@@ -193,12 +197,16 @@ class TeachersTab extends StatefulWidget {
 
 class _TeachersTabState extends State<TeachersTab> {
   void toggleApproval(String docId, bool currentStatus) async {
+    // Role-Based Access Control (RBAC): Admin must manually approve teacher accounts
+    // before they can create classes or start QR sessions.
     await FirebaseFirestore.instance.collection('users').doc(docId).update({
       'isApproved': !currentStatus,
     });
   }
 
+  // Opens a dialog allowing the admin to assign specific modules to a teacher
   void assignModules(String teacherId, List<dynamic> currentlyAssigned) async {
+    // Fetch all available modules from Firestore
     final snapshot = await FirebaseFirestore.instance.collection('modules').get();
     final allModules = snapshot.docs;
 
@@ -465,8 +473,10 @@ class _StudentListItemState extends State<StudentListItem> {
     _checkLowAttendance();
   }
 
+  // Calculates if a student's attendance is critically low across their enrolled classes
   Future<void> _checkLowAttendance() async {
     try {
+      // Data Aggregation: Fetch all classes this student is part of
       final classesQuery = await FirebaseFirestore.instance
           .collection('classes')
           .where('studentIds', arrayContains: widget.studentId)
@@ -507,6 +517,7 @@ class _StudentListItemState extends State<StudentListItem> {
 
         if (totalSessions > 0) {
           final percentage = (presentSessions / totalSessions) * 100;
+          // Automatic Warning System: Flags students with < 40% attendance across any class
           if (percentage < 40.0) {
             foundLow = true;
             break;

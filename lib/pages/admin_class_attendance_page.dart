@@ -28,15 +28,16 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
     _fetchAttendanceData();
   }
 
+  // Fetches every QR session that was ever run for this specific class
   Future<void> _fetchAttendanceData() async {
     try {
-      // 1. Get all sessions for this joinCode
+      // Fetch all sessions for this class
       final sessionsQuery = await FirebaseFirestore.instance
           .collection('sessions')
           .where('joinCode', isEqualTo: widget.joinCode)
           .get();
 
-      // Sort sessions chronologically (oldest first) to calculate cumulative percentage correctly
+      // Sort by oldest first to calculate accurate cumulative percentages
       final List<QueryDocumentSnapshot> sortedSessions = sessionsQuery.docs.toList();
       sortedSessions.sort((a, b) {
         final aTime = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
@@ -60,6 +61,7 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
             .collection('attendances')
             .get();
 
+        // Temporary list to hold attendance records for just this specific session
         List<Map<String, dynamic>> sessionRecords = [];
 
         for (var attDoc in attendances.docs) {
@@ -73,7 +75,7 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
             presentSessionsPerStudent[studentId] = (presentSessionsPerStudent[studentId] ?? 0) + 1;
           }
 
-          // Safely calculate cumulative percentage
+          // Calculate cumulative percentage
           final int presentCount = presentSessionsPerStudent[studentId] ?? 0;
           final double cumulativePercentage = (presentCount / sessionCounter) * 100;
 
@@ -100,7 +102,7 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
         });
       }
 
-      // Sort descending (newest first) for display in the UI
+      // Reverse sort to show newest sessions first in UI
       tempSessions.sort((a, b) => (b['rawDate'] as DateTime).compareTo(a['rawDate'] as DateTime));
 
       if (mounted) {
@@ -119,8 +121,10 @@ class _AdminClassAttendancePageState extends State<AdminClassAttendancePage> {
   }
 
   void exportSessionToClipboard(Map<String, dynamic> session) {
+    // Export Feature: Generates CSV-formatted string and copies to device clipboard
+    // This allows teachers to easily paste data directly into Excel or Google Sheets
     final StringBuffer csv = StringBuffer();
-    // Use Tab separator for better Excel compatibility
+    // Use tabs to separate columns for pasting into Excel
     csv.writeln("Session Date\tSession Time\tStudent Name\tStatus\tAttendance Rate");
 
     final records = session['records'] as List<Map<String, dynamic>>;

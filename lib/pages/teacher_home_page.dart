@@ -16,7 +16,7 @@ class TeacherHomePage extends StatefulWidget {
 class _TeacherHomePageState extends State<TeacherHomePage> {
   final TextEditingController sectionController = TextEditingController();
   String? _name;
-  bool isApproved = true; // Wait for fetch
+  bool isApproved = true; // Gets updated after fetching from Firestore
   List<String> assignedModules = [];
   String? selectedModule;
 
@@ -59,6 +59,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
     );
 
     try {
+      // Create class document with auto-generated Join Code
       await FirebaseFirestore.instance.collection('classes').add({
         'title': title,
         'section': section,
@@ -144,6 +145,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
     );
   }
 
+  // Signs the teacher out and navigates back to the Login Screen
   void logout() async {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
@@ -267,6 +269,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
           title: const Text('Enrolled Students'),
           content: SizedBox(
             width: double.maxFinite,
+            // Asynchronous Fetching: Fetch details for all enrolled student IDs concurrently
             child: FutureBuilder<List<DocumentSnapshot>>(
               future: Future.wait(studentIds.map((id) =>
                   FirebaseFirestore.instance.collection('users').doc(id.toString()).get())),
@@ -471,6 +474,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
 
   @override
   void dispose() {
+    // Prevent memory leaks by freeing the text controller when the page closes
     sectionController.dispose();
     super.dispose();
   }
@@ -526,7 +530,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
           }
 
           final classDocs = snapshot.data?.docs ?? [];
-          // Optional sorting by createdAt on the client to avoid missing index errors
+          // Sort classes client-side to avoid Firestore index errors
           classDocs.sort((a, b) {
             final aData = a.data() as Map<String, dynamic>;
             final bData = b.data() as Map<String, dynamic>;

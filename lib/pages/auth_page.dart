@@ -18,6 +18,7 @@ class _AuthPageState extends State<AuthPage> {
   bool loading = false;
   String role = 'student';
 
+  // Primary function that handles both Login and Registration flows
   Future<void> submit() async {
     setState(() => loading = true);
 
@@ -33,6 +34,7 @@ class _AuthPageState extends State<AuthPage> {
           password: _password.text.trim(),
         );
 
+        // If registering, also save the user's details into Firestore
         await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set({
           'name': _name.text.trim(),
           'email': _email.text.trim(),

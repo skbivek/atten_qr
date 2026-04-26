@@ -20,6 +20,7 @@ class _LoginPageState extends State<LoginPage> {
   bool obscurePassword = true;
   bool isLoading = false;
 
+  // Handles sending a password reset email using Firebase Auth
   Future<void> handleForgotPassword() async {
     final email = emailController.text.trim();
     if (email.isEmpty) {
@@ -57,6 +58,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // Primary method to authenticate users
   void handleLogin() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
@@ -78,7 +80,8 @@ class _LoginPageState extends State<LoginPage> {
 
       final uid = userCredential.user?.uid;
       if (uid != null) {
-        // Fetch role from Firestore
+        // Fetch role from Firestore to determine which dashboard to show
+        // This is the core of our Role-Based Access Control (RBAC) routing
         final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
         final role = userDoc.data()?['role'] ?? 'student'; // Default to student
 
@@ -119,6 +122,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    // Free up resources used by the text controllers when the page is destroyed
     emailController.dispose();
     passwordController.dispose();
     super.dispose();
@@ -136,9 +140,9 @@ class _LoginPageState extends State<LoginPage> {
               constraints: const BoxConstraints(maxWidth: 430),
               child: Column(
                 children: [
-                  // Logo Section (Background removed, size increased)
+                  // Logo Section
                   SizedBox(
-                    height: 180, // Increased size
+                    height: 180,
                     width: 180,
                     child: Image.asset(
                       'assets/logo.png',
@@ -152,7 +156,7 @@ class _LoginPageState extends State<LoginPage> {
                       },
                     ),
                   ),
-                  const SizedBox(height: 4), // Reduced gap from 16 to 4
+                  const SizedBox(height: 4),
                   const Text(
                     'Welcome Back',
                     style: TextStyle(

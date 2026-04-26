@@ -31,13 +31,16 @@ class _QRSessionPageState extends State<QRSessionPage> {
   @override
   void initState() {
     super.initState();
+    // Start the QR session as soon as the page opens
     _startSession();
   }
 
   Future<void> _startSession() async {
+    // Initial token setup
     _generateNewToken();
 
     try {
+      // Create a new session record in Firestore
       final docRef = await FirebaseFirestore.instance.collection('sessions').add({
         'classTitle': widget.classTitle,
         'joinCode': widget.joinCode,
@@ -50,6 +53,8 @@ class _QRSessionPageState extends State<QRSessionPage> {
         sessionId = docRef.id;
       });
 
+      // Start a 30-second countdown timer. When it reaches 0, the token rotates.
+      // This is the core security feature preventing students from sharing QR photos.
       _tokenTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
         if (_secondsLeft > 1) {
           if (mounted) {
@@ -66,6 +71,7 @@ class _QRSessionPageState extends State<QRSessionPage> {
     }
   }
 
+  // Helper method to generate a random 8-character alphanumeric string
   void _generateNewToken() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     final random = Random();
@@ -73,9 +79,12 @@ class _QRSessionPageState extends State<QRSessionPage> {
         8, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
   }
 
+  // Method to rotate the token and update Firestore with the new one
   Future<void> _rotateToken() async {
+    // If the session hasn't been created yet, do nothing
     if (sessionId == null) return;
     
+    // Get a fresh token and reset the countdown timer back to 30
     _generateNewToken();
     if (mounted) {
       setState(() {
@@ -93,14 +102,20 @@ class _QRSessionPageState extends State<QRSessionPage> {
     }
   }
 
+  // Method called when the teacher clicks "End Session"
   Future<void> _endSession() async {
     if (sessionId == null) return;
     
+    // Stop the token rotation timer so the QR code stops changing
     _tokenTimer?.cancel();
     
     try {
+      // Mark session as inactive
       await FirebaseFirestore.instance.collection('sessions').doc(sessionId).update({'isActive': false});
 
+      // Figure out who didn't show up
+      // We do this by getting all present students, comparing with the enrolled list,
+      // and mathematically deducing the absentees.
       final atts = await FirebaseFirestore.instance
           .collection('sessions')
           .doc(sessionId)
@@ -143,7 +158,9 @@ class _QRSessionPageState extends State<QRSessionPage> {
 
   @override
   void dispose() {
+    // Stop the timer when the page is closed
     _tokenTimer?.cancel();
+    // If the user navigates away without clicking "End Session", mark it inactive anyway
     if (sessionId != null) {
       FirebaseFirestore.instance
           .collection('sessions')

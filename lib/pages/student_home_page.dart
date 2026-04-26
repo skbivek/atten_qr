@@ -27,6 +27,8 @@ class _StudentHomePageState extends State<StudentHomePage> {
     _listenUserData();
   }
 
+  // Set up a real-time listener to watch for changes to the user's document
+  // This is how the student instantly sees warnings pushed by the admin
   void _listenUserData() {
     _userSubscription = FirebaseFirestore.instance
         .collection('users')
@@ -48,6 +50,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
     });
   }
 
+  // Method called when the student enters a code to join a new class
   Future<void> joinClass() async {
     final code = joinCodeController.text.trim().toUpperCase();
 
@@ -59,6 +62,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
     }
 
     try {
+      // Find the class matching this join code
       final querySnapshot = await FirebaseFirestore.instance
           .collection('classes')
           .where('joinCode', isEqualTo: code)
@@ -77,6 +81,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
       final classData = classDoc.data();
       final studentIds = classData['studentIds'] as List<dynamic>? ?? [];
 
+      // Check if they're already in the class to prevent duplicates
       if (studentIds.contains(widget.uid)) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -85,6 +90,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
         return;
       }
 
+      // Add student to the class list
       await classDoc.reference.update({
         'studentIds': FieldValue.arrayUnion([widget.uid])
       });
@@ -139,6 +145,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
+  // Sign out the current user and redirect to the login screen
   void logout() async {
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
@@ -390,6 +397,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
+  // Clears the warning array in Firestore so the banner disappears
   Future<void> _dismissWarnings() async {
     try {
       await FirebaseFirestore.instance.collection('users').doc(widget.uid).update({
@@ -449,6 +457,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
 
   @override
   void dispose() {
+    // Cancel the real-time listener to save memory and battery
     _userSubscription?.cancel();
     joinCodeController.dispose();
     super.dispose();

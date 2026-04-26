@@ -29,6 +29,7 @@ class _StudentClassAttendancePageState extends State<StudentClassAttendancePage>
     _fetchAttendanceData();
   }
 
+  // Fetches every QR session that was ever run for this specific class
   Future<void> _fetchAttendanceData() async {
     try {
       final sessionsQuery = await FirebaseFirestore.instance
@@ -44,6 +45,7 @@ class _StudentClassAttendancePageState extends State<StudentClassAttendancePage>
         tempTotal++;
         final sessionTime = (sessionDoc.data()['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
 
+        // Check if the student has an attendance record for this session
         final attendances = await FirebaseFirestore.instance
             .collection('sessions')
             .doc(sessionDoc.id)
@@ -74,6 +76,7 @@ class _StudentClassAttendancePageState extends State<StudentClassAttendancePage>
         });
       }
 
+      // Sort chronological data client-side (newest first) to avoid missing index errors in Firestore
       tempRecords.sort((a, b) => (b['rawDate'] as DateTime).compareTo(a['rawDate'] as DateTime));
 
       if (mounted) {

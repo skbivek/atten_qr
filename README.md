@@ -1,6 +1,6 @@
 # atten_qr
 
-A new Flutter project.
+A Smart attendance system based on QR Scan.
 
 ## Getting Started
 
